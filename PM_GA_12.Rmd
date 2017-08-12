@@ -1,0 +1,302 @@
+---
+title: "Predictive Modeling Group Assignment (Group 12)"
+output:
+  html_document: default
+  html_notebook: default
+---
+ 
+ Problem statement:
+ 
+ Simmons Catalogue (Adapted from Anderson, Sweeney, and Williams)
+ 
+
+
+Simmons' catalogs are expensive and Simmons would like to send them to only those customers who have the highest probability of making a $200 purchase using the discount coupon included in the catalog. Simmons' management thinks that annual spending at Simmons Stores and whether a customer has a Simmons credit card are two variables that might be helpful in predicting whether a customer who receives the catalog will use the coupon to make a $200 purchase.
+
+
+Simmons conducted a study by sending out 100 catalogs, 50 to customers who have a Simmons credit card and 50 to customers who do not have the card. At the end of the test period, Simmons noted for each of the 100 customers: 
+1) the amount the customer spent last year at Simmons, 
+2) whether the customer had a Simmons credit card, and
+3) whether the customer made a $200 purchase.
+The data file that contains the information is in  Logit-Simmons.xls Develop a logistic regression model, obtain the output and interpret the results
+
+ 
+ 
+ 
+ Solution:
+ 
+ Let us start with imporing Libraries
+```{r}
+library(caret)
+library(ggplot2)
+library(Information)
+library(caTools)
+library(stringr)
+library(car)
+library(ROCR)
+library(MASS)
+library(gmodels)
+library(dummies)
+library(Hmisc)
+```
+
+```{r}
+
+
+getwd()
+Rawdata <- read.csv("Logit-Simmons.csv")
+summary(Rawdata)
+
+library(corrplot)
+corrplot(cor(Rawdata),method = "number",title = "Correlation plot for Simmons  data",order = "FPC")
+
+
+
+```
+
+SpendCat and Spending are higly correlated. So for model building prpose, we will exclude SpendCat variable. Reason for choosing SpendCat is that very less information is avaibale about .
+
+Also Customer ID is just an index and we will have to remove it from our observations.
+
+
+```{r}
+str(Rawdata)
+```
+
+Variable understanding:
+
+Customer  : Unique customer ID.
+Spending  : amount the customer spent last year at Simmons, (this will be our x1)
+Card      : whether the customer had a Simmons credit card(1=customer has card ; 0=customer do not have card) (this will be our x2)
+Purchase  : whether the customer will use coupon to make $200 purcase (this will be our Y variable)
+SpendCat  : Spending Cataloue
+
+Let us convert Card and Purchase to categorical variables i.e. factors
+
+```{r}
+LogisticsData=Rawdata[,c(2,3,4)]
+LogisticsData$Card=as.factor(LogisticsData$Card)
+LogisticsData$Purchase=as.factor(LogisticsData$Purchase)
+
+str(LogisticsData)
+summary(LogisticsData)
+print(LogisticsData)
+
+```
+
+Let us check if there is any missing value
+```{r}
+anyNA(LogisticsData)
+```
+
+So there is not null or missing value in the dataset
+
+
+```{r}
+
+CrossTable(LogisticsData$Card)
+CrossTable(LogisticsData$Purchase)
+#CrossTable(LogisticsData$SpendCat)
+
+```
+Check For Missing Values in the Data set
+```{r}
+
+sum(is.na(LogisticsData))
+```
+
+Let us now find if there is any outlier
+
+```{r}
+quantile(LogisticsData$Spending, c(0.05,0.1,0.2,0.3,0.4,0.50,0.6,0.7,0.8,0.9,0.95,0.99,1))
+
+```
+
+From above quantiles, we can say that there is no outlier present in In Spending variable.
+
+Remaining two variables i.e. Card and Purchase are categorical variables. so we don't have to check for outlier for thosre variables.
+
+Now let us create dummy variables for categories of categorical variable.
+
+```{r}
+
+#LogisticsDataDum = dummy.data.frame(LogisticsData,names = c("Card","Purchase"),sep="_")
+LogisticsDataDum = dummy.data.frame(LogisticsData,names = c("Card"),sep="_")
+
+
+
+
+str(LogisticsDataDum)
+print(LogisticsDataDum)
+
+```
+In a categorical variable, if there are n levels, then we will have to create n-1 dummy variables. 
+
+We will remove column "Customer"" as it is customer id which is not adding any value to our regression as of now
+
+I am removing "SpendCat"" as there is no clear information about that variable given.
+
+
+```{r}
+
+LogisticsDataDum1=LogisticsDataDum[,-c(2)]
+str(LogisticsDataDum1)
+print(LogisticsDataDum1)
+
+```
+
+
+```{r}
+# split
+smp_size <- floor(0.7 * nrow(LogisticsDataDum1))
+## set the seed to make your partition reproductible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(LogisticsDataDum1)), size = smp_size)
+train <- LogisticsDataDum1[train_ind, ]
+test <- LogisticsDataDum1[-train_ind, ]
+nrow(train)
+nrow(test)
+```
+
+
+
+
+
+```{r}
+# Model with all variables
+model1 <- glm(Purchase ~ ., data = train, family = binomial)
+summary(model1)
+```
+
+We will use stepwise variable selection method to get best fit model
+
+```{r}
+# Stepwise selection of variables
+best_model = step(model1,direction = "both")
+```
+```{r}
+
+summary(best_model)
+
+```
+
+```{r}
+vif(model1)
+```
+
+```{r}
+
+
+train$predTrain <- predict(model1, type = "response") # in-sample accuracy
+#train$PredTrain <- PredTrain
+print(train)
+
+
+
+
+```
+```{r}
+table(train$Purchase, train$predTrain >= 0.5)
+```
+
+Accuracy is : 
+
+```{r}
+
+  #(37+11)/(37+5+14+11)
+(28+20)/(28+20+12+9)
+
+```
+
+
+
+```{r}
+
+test$predTest <- predict(model1, newdata = test, type = "response") # out-sample accuracy
+
+print(test)
+
+
+```
+```{r}
+table(test$Purchase, test$predTest >= 0.5)
+```
+
+
+
+
+Accuracy is : 
+```{r}
+
+#(13+9)/(13+5+6+9)
+(18+1)/(18+1+5+6)
+
+```
+
+
+
+```{r}
+
+# ROC Curve
+library(ROCR)
+ROCRpred <- prediction(train$predTrain, train$Purchase)
+ROCRperf <- performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize = TRUE, print.cutoffs.at = seq(0,1,0.1), text.adj = c(-0.2, 1.7))
+
+
+```
+
+```{r}
+
+
+
+auc.tmp <- performance(ROCRpred,"auc"); 
+auc <- as.numeric(auc.tmp@y.values)
+auc
+
+
+```
+
+```{r}
+## C-statistic
+library(Hmisc)
+
+train$predicted_prob = predict(model1,  type = "response")
+rcorr.cens(train$predicted_prob,train$Purchase) 
+
+test$predicted_prob = predict(model1, newdata = test,type = "response")
+rcorr.cens(test$predicted_prob,test$Purchase)
+
+#KS-statistic
+
+model_score <- prediction(train$predicted_prob,train$Purchase)
+
+model_perf <- performance(model_score, "tpr", "fpr")
+
+ks_table <- attr(model_perf, "y.values")[[1]] - (attr(model_perf, "x.values")[[1]])
+
+ks = max(ks_table)
+
+which(ks_table == ks)
+
+ks
+
+model_score_test <- prediction(test$predicted_prob,test$Purchase)
+
+model_perf_test <- performance(model_score_test, "tpr", "fpr")
+
+ks_table_test <- attr(model_perf_test, "y.values")[[1]] - (attr(model_perf_test, "x.values")[[1]])
+
+ks1=max(ks_table_test)
+
+which(ks_table_test == ks1)
+
+
+ks1
+
+
+# Information value
+
+
+```
+
